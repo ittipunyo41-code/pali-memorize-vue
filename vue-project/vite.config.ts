@@ -29,8 +29,8 @@ export default defineConfig({
       },
     },
   },
-  // Base path for deployment
-  base: './',
+  // GitHub Pages serves this project under /<repository-name>/.
+  base: process.env.GITHUB_ACTIONS === 'true' ? '/pali-memorize-vue/' : './',
   // Server configuration
   server: {
     port: 3000,
