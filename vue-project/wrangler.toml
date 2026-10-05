@@ -7,9 +7,4 @@ vars = { ENVIRONMENT = "production" }
 [env.staging]
 vars = { ENVIRONMENT = "staging" }
 
-[build.upload]
-format = "modules"
-dir = "dist"
-
-[build.command]
-command = "npm run build"
+pages_build_output_dir = "./dist"
