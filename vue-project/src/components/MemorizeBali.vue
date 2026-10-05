@@ -29,7 +29,8 @@ const presets = [
 ]
 
 // State หลัก
-const inputText = ref<string>(presets[0].text)
+const initialPreset = presets[0] ?? { title: '', text: '' }
+const inputText = ref<string>(initialPreset.text)
 const processedWords = ref<WordItem[]>([])
 const isAllRevealed = ref<boolean>(false)
 const lastRatio = ref<number>(0.5)

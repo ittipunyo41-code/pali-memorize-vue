@@ -24,7 +24,8 @@ const presets = [
   }
 ]
 
-const inputText = ref<string>(presets[0].text)
+const initialPreset = presets[0] ?? { title: '', text: '' }
+const inputText = ref<string>(initialPreset.text)
 const processedWords = ref<WordItem[]>([])
 const currentRatio = ref<number>(0.5)
 
@@ -95,7 +96,8 @@ const toggleAll = (reveal: boolean) => {
 const moveFocusAndAutoReveal = (newIndex: number) => {
   if (newIndex >= 0 && newIndex < hiddenWords.value.length) {
     activeHiddenIndex.value = newIndex
-    hiddenWords.value[newIndex].isRevealed = true
+    const nextWord = hiddenWords.value[newIndex]
+    if (nextWord) nextWord.isRevealed = true
   }
 }
 
@@ -111,8 +113,8 @@ const handleKeyDown = (event: KeyboardEvent) => {
     event.preventDefault()
     if (activeHiddenIndex.value >= 0 && activeHiddenIndex.value < hiddenWords.value.length) {
       const activeWord = hiddenWords.value[activeHiddenIndex.value]
-      const currentLine = activeWord.lineIndex
-      
+      const currentLine = activeWord?.lineIndex ?? -1
+
       const lineWords = processedWords.value.filter(w => w.isHidden && w.lineIndex === currentLine)
       const isAnyUnrevealed = lineWords.some(w => !w.isRevealed)
 
@@ -509,39 +511,31 @@ html, body {
   color: #1f1f1f;
 }
 
-/* กล่องซ่อนคำแบบยืดขยายตามข้อความอัตโนมัติ */
+/* ซ่อนคำด้วยเส้นประแทนกล่อง เพื่อคงความสูงบรรทัดให้เท่าข้อความ */
 .hidden-slot {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: inline;
   position: relative;
-  min-width: 4.5rem;             /* ขนาดขั้นต่ำจองพื้นที่ไว้ */
-  padding: 0 0.6rem;
-  margin: 0 0.1rem;
-  border-radius: 8px;
-  background-color: #e8eaed;     /* แถบเทาสว่าง */
-  border-bottom: 2px solid #bdc1c6;
+  padding: 0;
+  margin: 0 0.08rem;
+  border-bottom: 2px dashed #9aa4b2;
   cursor: pointer;
   user-select: none;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  vertical-align: middle;
-  box-sizing: border-box;
+  transition: border-color 0.18s ease;
 }
 
-/* ข้อความข้างในกล่องซ่อน */
 .hidden-slot .slot-text {
   opacity: 0;
   visibility: hidden;
-  color: #0b57d0;
+  color: #0d4bbf;
   font-weight: 700;
+  letter-spacing: 0.02em;
   white-space: nowrap;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.18s ease;
 }
 
-/* เมื่อ Hover (เมาส์ชี้) -> ขยายกล่องพอดับข้อความ และแสดงตัวหนังสือ */
 .hidden-slot:hover {
-  background-color: #dbe4f0;
-  border-bottom-color: #7ca5eb;
+  border-color: #1f5fe8;
+  border-bottom-style: solid;
 }
 
 .hidden-slot:hover .slot-text {
@@ -549,10 +543,9 @@ html, body {
   visibility: visible;
 }
 
-/* เมื่อเปิดเฉลยแล้ว */
 .hidden-slot.is-revealed {
-  background-color: #e8f0fe;     /* โทนฟ้าสว่าง Gemini */
-  border-bottom: 2px dashed #a8c7fa;
+  border-color: #8ab4f8;
+  border-bottom-style: solid;
 }
 
 .hidden-slot.is-revealed .slot-text {
@@ -560,15 +553,9 @@ html, body {
   visibility: visible;
 }
 
-/* Focus Border วงกลมไฮไลต์ตำแหน่งปัจจุบัน */
-.hidden-slot.is-active::after {
-  content: '';
-  position: absolute;
-  inset: -3px;
-  border: 2px solid #0b57d0;
-  border-radius: 10px;
-  pointer-events: none;
-  box-shadow: 0 0 0 2px rgba(11, 87, 208, 0.2);
+.hidden-slot.is-active {
+  border-color: #1f5fe8;
+  border-bottom-style: solid;
 }
 
 .empty-state {
