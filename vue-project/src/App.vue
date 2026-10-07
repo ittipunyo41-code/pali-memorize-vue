@@ -16,11 +16,11 @@ const presets = [
   },
   {
     title: 'พาหุง (ท่อนแรก)',
-    text: 'พาหุง สะหัสสะมะภินิมมิตะสาวุธันตัง ครีเมขะลัง อุทิตะโฆระสะเสนะมารัง ทานาทิธัมมะวิธินา ชิตะวา มุนินโท ตันเตชะสา ภะวะตุ เต ชะยะมังคะลานิ'
+    text: 'พาหุง สะหัสสะมะภินิมมิตะสาวุธันตัง\nครีเมขะลัง อุทิตะโฆระสะเสนะมารัง\nทานาทิธัมมะวิธินา ชิตะวา มุนินโท\nตันเตชะสา ภะวะตุ เต ชะยะมังคะลานิ'
   },
   {
     title: 'ชินบัญชร (ย่อ)',
-    text: 'ชินะปัญชะระปะริตตัง มัง รักขะตุ สัพพะทา'
+    text: 'ชินะปัญชะระปะริตตัง\nมัง รักขะตุ สัพพะทา'
   }
 ]
 
@@ -28,17 +28,22 @@ const initialPreset = presets[0] ?? { title: '', text: '' }
 const inputText = ref<string>(initialPreset.text)
 const processedWords = ref<WordItem[]>([])
 const currentRatio = ref<number>(0.5)
-
-// ขนาดฟอนต์เริ่มต้น (1.5rem)
 const fontSize = ref<number>(1.5)
-
-// ดัชนีคำซ่อนปัจจุบัน
 const activeHiddenIndex = ref<number>(-1)
 
-// คำซ่อนทั้งหมด
 const hiddenWords = computed(() => processedWords.value.filter(w => w.isHidden))
 
-// ปรับขนาดฟอนต์
+const groupedLines = computed(() => {
+  const map = new Map<number, WordItem[]>()
+  processedWords.value.forEach(w => {
+    if (!map.has(w.lineIndex)) map.set(w.lineIndex, [])
+    map.get(w.lineIndex)!.push(w)
+  })
+  return Array.from(map.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([lineIndex, words]) => ({ lineIndex, words }))
+})
+
 const changeFontSize = (delta: number) => {
   const newSize = fontSize.value + delta
   if (newSize >= 1.1 && newSize <= 2.5) {
@@ -46,37 +51,31 @@ const changeFontSize = (delta: number) => {
   }
 }
 
-// สุ่มซ่อนคำ
 const generateTest = (hideRatio: number): void => {
   if (!inputText.value.trim()) return
   currentRatio.value = hideRatio
 
-  const rawWords = inputText.value.trim().split(/\s+/)
-  let currentLine = 0
-  let wordsInLine = 0
+  const rawLines = inputText.value.split('\n')
+  const items: WordItem[] = []
+  let id = 0
 
-  processedWords.value = rawWords.map((word, index) => {
-    const shouldHide = Math.random() < hideRatio
-
-    if (wordsInLine >= 8) {
-      currentLine++
-      wordsInLine = 0
-    }
-    wordsInLine++
-
-    return {
-      id: index,
-      text: word,
-      isHidden: shouldHide,
-      isRevealed: false,
-      lineIndex: currentLine
-    }
+  rawLines.forEach((line, lineIdx) => {
+    const words = line.trim().split(/\s+/).filter(w => w.length > 0)
+    words.forEach(word => {
+      items.push({
+        id: id++,
+        text: word,
+        isHidden: Math.random() < hideRatio,
+        isRevealed: false,
+        lineIndex: lineIdx
+      })
+    })
   })
 
+  processedWords.value = items
   activeHiddenIndex.value = hiddenWords.value.length > 0 ? 0 : -1
 }
 
-// คลิกเปิด/ปิด คำซ่อน
 const toggleWord = (wordObj: WordItem) => {
   if (wordObj.isHidden) {
     wordObj.isRevealed = !wordObj.isRevealed
@@ -85,14 +84,28 @@ const toggleWord = (wordObj: WordItem) => {
   }
 }
 
-// เปิด/ปิด เฉลยทั้งหมด
 const toggleAll = (reveal: boolean) => {
   processedWords.value.forEach(w => {
     if (w.isHidden) w.isRevealed = reveal
   })
 }
 
-// ย้าย Cursor และ Auto เปิดเฉลย
+// ปิดคำที่เปิดไว้ล่าสุด (ถอยหลังทีละคำ)
+const undoReveal = () => {
+  let lastRevealedIdx = -1
+  for (let i = hiddenWords.value.length - 1; i >= 0; i--) {
+    if (hiddenWords.value[i]?.isRevealed) {
+      lastRevealedIdx = i
+      break
+    }
+  }
+  if (lastRevealedIdx !== -1) {
+    const word = hiddenWords.value[lastRevealedIdx]
+    if (word) word.isRevealed = false
+    activeHiddenIndex.value = lastRevealedIdx
+  }
+}
+
 const moveFocusAndAutoReveal = (newIndex: number) => {
   if (newIndex >= 0 && newIndex < hiddenWords.value.length) {
     activeHiddenIndex.value = newIndex
@@ -101,38 +114,33 @@ const moveFocusAndAutoReveal = (newIndex: number) => {
   }
 }
 
-// คีย์บอร์ดคอนโทรล
 const handleKeyDown = (event: KeyboardEvent) => {
   if (hiddenWords.value.length === 0) return
 
   const target = event.target as HTMLElement
   if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT')) return
 
-  // Shift + C: สลับเปิด/ปิดทั้งแถวปัจจุบัน
+    // Shift + C: toggle เปิด/ปิดทั้งหมด
   if (event.shiftKey && (event.key === 'C' || event.key === 'c' || event.key === 'ฉ')) {
     event.preventDefault()
-    if (activeHiddenIndex.value >= 0 && activeHiddenIndex.value < hiddenWords.value.length) {
-      const activeWord = hiddenWords.value[activeHiddenIndex.value]
-      const currentLine = activeWord?.lineIndex ?? -1
-
-      const lineWords = processedWords.value.filter(w => w.isHidden && w.lineIndex === currentLine)
-      const isAnyUnrevealed = lineWords.some(w => !w.isRevealed)
-
-      lineWords.forEach(w => {
-        w.isRevealed = isAnyUnrevealed
-      })
-    }
+    const allRevealed = hiddenWords.value.every(w => w.isRevealed)
+    toggleAll(!allRevealed)
     return
   }
 
-  // ลูกศรขวา / ลง
+  // Delete / Backspace: ปิดคำที่เปิดไว้ล่าสุด ถอยหลังทีละคำ
+  if (event.key === 'Delete' || event.key === 'Backspace') {
+    event.preventDefault()
+    undoReveal()
+    return
+  }
+
   if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
     event.preventDefault()
     moveFocusAndAutoReveal(activeHiddenIndex.value + 1)
     return
   }
 
-  // ลูกศรซ้าย / ขึ้น
   if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
     event.preventDefault()
     moveFocusAndAutoReveal(activeHiddenIndex.value - 1)
@@ -143,6 +151,237 @@ const handleKeyDown = (event: KeyboardEvent) => {
 const selectPreset = (text: string) => {
   inputText.value = text
   generateTest(currentRatio.value)
+}
+
+// ============ Export เป็นไฟล์ HTML แบบออฟไลน์ ============
+const exportHTML = () => {
+  if (processedWords.value.length === 0) return
+
+  const wordsData = processedWords.value.map(w => ({
+    text: w.text,
+    isHidden: w.isHidden,
+    isRevealed: w.isRevealed,
+    lineIndex: w.lineIndex
+  }))
+  const wordsJson = JSON.stringify(wordsData)
+  const initialFontSize = fontSize.value
+
+  const html = `<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>บาลีฝึกท่องจำ</title>
+<style>
+  :root { --font-size: ${initialFontSize}rem; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'TH Sarabun New', 'Sarabun', 'Leelawadee UI', 'Tahoma', sans-serif;
+    background: #f8f9fa; color: #1f1f1f; padding: 2rem 1rem;
+    min-height: 100vh;
+  }
+  .container {
+    max-width: 1200px; margin: 0 auto; background: #fff;
+    border-radius: 12px; padding: 2rem 3rem;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+  }
+  h1 { font-size: 1.8rem; margin-bottom: 1rem; font-weight: 700; }
+  .toolbar {
+    display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;
+    margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid #e3e3e3;
+  }
+  .toolbar button {
+    background: #f1f3f4; border: none; padding: 0.35rem 0.8rem;
+    border-radius: 8px; cursor: pointer; font-family: inherit;
+    font-size: 1rem; transition: background 0.2s;
+  }
+  .toolbar button:hover { background: #e2e7eb; }
+  .toolbar .font-label {
+    padding: 0.35rem 0.5rem; font-size: 1rem; color: #444;
+    min-width: 3.5rem; text-align: center;
+  }
+  .content {
+    line-height: 2.2; font-size: var(--font-size);
+    transition: font-size 0.2s ease;
+  }
+  .line { margin-bottom: 0.25rem; }
+  .word { display: inline-block; margin-right: 0.6rem; }
+  .hidden-slot {
+    display: inline; position: relative;
+    border-bottom: 2px dashed #9aa4b2;
+    cursor: pointer; user-select: none;
+    transition: border-color 0.18s ease;
+  }
+  .hidden-slot .slot-text {
+    opacity: 0; visibility: hidden;
+    color: #0d4bbf; font-weight: 700; letter-spacing: 0.02em;
+    white-space: nowrap; transition: opacity 0.18s ease;
+  }
+  .hidden-slot:hover { border-color: #1f5fe8; border-bottom-style: solid; }
+  .hidden-slot:hover .slot-text { opacity: 1; visibility: visible; }
+  .hidden-slot.is-revealed { border-color: #8ab4f8; border-bottom-style: solid; }
+  .hidden-slot.is-revealed .slot-text { opacity: 1; visibility: visible; }
+  .hidden-slot.is-active { border-color: #1f5fe8; border-bottom-style: solid; }
+  .footer {
+    margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e3e3e3;
+    font-size: 0.95rem; color: #5f6368; text-align: center;
+  }
+  kbd {
+    background: #f1f3f4; border: 1px solid #dadce0; border-radius: 4px;
+    padding: 0.05rem 0.3rem; font-family: monospace; font-size: 0.9em;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>✨ บาลีฝึกท่องจำ</h1>
+  <div class="toolbar">
+    <button onclick="revealAll(true)">👁️ เฉลยหมด</button>
+    <button onclick="revealAll(false)">🙈 ซ่อนหมด</button>
+    <button onclick="undoReveal()">⌫ ปิดคำล่าสุด</button>
+    <button onclick="changeFont(-0.1)">A-</button>
+    <span class="font-label" id="fontLabel">100%</span>
+    <button onclick="changeFont(0.1)">A+</button>
+  </div>
+  <div class="content" id="content"></div>
+  <div class="footer">
+    💡 <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> เลื่อน + Auto เปิดเฉลย |
+    <kbd>Delete</kbd> / <kbd>Backspace</kbd> ปิดคำล่าสุดถอยหลังทีละคำ |
+    <kbd>Shift</kbd>+<kbd>C</kbd> ปิดคำที่เปิดทั้งหมด
+  </div>
+</div>
+<script>
+(function() {
+  var words = ${wordsJson};
+  var baseFontSize = ${initialFontSize};
+  var currentFontSize = baseFontSize;
+  var activeIndex = -1;
+  var hiddenWords = words.filter(function(w) { return w.isHidden; });
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function(c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
+  }
+
+  function render() {
+    var byLine = new Map();
+    words.forEach(function(w) {
+      if (!byLine.has(w.lineIndex)) byLine.set(w.lineIndex, []);
+      byLine.get(w.lineIndex).push(w);
+    });
+    var container = document.getElementById('content');
+    container.innerHTML = '';
+    Array.from(byLine.keys()).sort(function(a, b) { return a - b; }).forEach(function(lineIdx) {
+      var lineEl = document.createElement('div');
+      lineEl.className = 'line';
+      byLine.get(lineIdx).forEach(function(w) {
+        var wrap = document.createElement('span');
+        wrap.className = 'word';
+        if (w.isHidden) {
+          var slot = document.createElement('span');
+          var isActive = activeIndex >= 0 && hiddenWords[activeIndex] === w;
+          slot.className = 'hidden-slot'
+            + (w.isRevealed ? ' is-revealed' : '')
+            + (isActive ? ' is-active' : '');
+          slot.innerHTML = '<span class="slot-text">' + escapeHtml(w.text) + '</span>';
+          slot.addEventListener('click', function() {
+            w.isRevealed = !w.isRevealed;
+            var i = hiddenWords.indexOf(w);
+            if (i >= 0) activeIndex = i;
+            render();
+          });
+          wrap.appendChild(slot);
+        } else {
+          var p = document.createElement('span');
+          p.textContent = w.text;
+          wrap.appendChild(p);
+        }
+        lineEl.appendChild(wrap);
+      });
+      container.appendChild(lineEl);
+    });
+  }
+
+  window.revealAll = function(reveal) {
+    words.forEach(function(w) { if (w.isHidden) w.isRevealed = reveal; });
+    render();
+  };
+
+  window.undoReveal = function() {
+    var lastRevealedIdx = -1;
+    for (var i = hiddenWords.length - 1; i >= 0; i--) {
+      if (hiddenWords[i].isRevealed) { lastRevealedIdx = i; break; }
+    }
+    if (lastRevealedIdx !== -1) {
+      hiddenWords[lastRevealedIdx].isRevealed = false;
+      activeIndex = lastRevealedIdx;
+      render();
+    }
+  };
+
+  window.changeFont = function(delta) {
+    var next = Math.round((currentFontSize + delta) * 10) / 10;
+    if (next >= 1.1 && next <= 2.5) {
+      currentFontSize = next;
+      document.documentElement.style.setProperty('--font-size', currentFontSize + 'rem');
+      document.getElementById('fontLabel').textContent =
+        Math.round((currentFontSize / 1.5) * 100) + '%';
+    }
+  };
+
+  document.addEventListener('keydown', function(e) {
+    if (hiddenWords.length === 0) return;
+        // Shift+C: toggle เปิด/ปิดทั้งหมด
+    if (e.shiftKey && (e.key === 'C' || e.key === 'c' || e.key === 'ฉ')) {
+      e.preventDefault();
+      var allRevealed = hiddenWords.every(function(w) { return w.isRevealed; });
+      window.revealAll(!allRevealed);
+      return;
+    }
+    // Delete / Backspace: ปิดคำล่าสุดถอยหลังทีละคำ
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      window.undoReveal();
+      return;
+    }
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (activeIndex + 1 < hiddenWords.length) {
+        activeIndex++;
+        hiddenWords[activeIndex].isRevealed = true;
+        render();
+      }
+      return;
+    }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (activeIndex - 1 >= 0) {
+        activeIndex--;
+        hiddenWords[activeIndex].isRevealed = true;
+        render();
+      }
+      return;
+    }
+  });
+
+  document.getElementById('fontLabel').textContent =
+    Math.round((currentFontSize / 1.5) * 100) + '%';
+  render();
+})();
+<\/script>
+</body>
+</html>`
+
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `bali-practice-${Date.now()}.html`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 onMounted(() => {
@@ -157,33 +396,33 @@ onUnmounted(() => {
 
 <template>
   <div class="gemini-app font-sarabun">
-    
-    <!-- Top Header -->
     <header class="app-header">
       <div class="brand">
         <span class="sparkle-icon">✨</span>
         <h1 class="title">บาลีฝึกท่องจำ</h1>
       </div>
 
-      <!-- Tools: ปรับขนาดตัวหนังสือ -->
-      <div class="font-controls">
-        <span class="tool-label">ขนาดอักษร:</span>
-        <button @click="changeFontSize(-0.1)" class="btn-tool" title="ลดขนาด">A-</button>
-        <span class="font-indicator">{{ Math.round((fontSize / 1.5) * 100) }}%</span>
-        <button @click="changeFontSize(0.1)" class="btn-tool" title="เพิ่มขนาด">A+</button>
+      <div class="header-right">
+        <button @click="exportHTML" class="btn-export" title="ดาวน์โหลดไฟล์ HTML สำหรับฝึกออฟไลน์">
+          ⬇️ Export HTML
+        </button>
+
+        <div class="font-controls">
+          <span class="tool-label">ขนาดอักษร:</span>
+          <button @click="changeFontSize(-0.1)" class="btn-tool" title="ลดขนาด">A-</button>
+          <span class="font-indicator">{{ Math.round((fontSize / 1.5) * 100) }}%</span>
+          <button @click="changeFontSize(0.1)" class="btn-tool" title="เพิ่มขนาด">A+</button>
+        </div>
       </div>
     </header>
 
-    <!-- Main Content -->
     <main class="app-main">
-      
-      <!-- Control Panel สไตล์ Notion -->
       <section class="control-card">
         <div class="preset-row">
           <span class="label">บทสวด:</span>
           <div class="preset-pills">
-            <button 
-              v-for="p in presets" 
+            <button
+              v-for="p in presets"
               :key="p.title"
               @click="selectPreset(p.text)"
               class="pill-btn"
@@ -195,9 +434,9 @@ onUnmounted(() => {
 
         <textarea
           v-model="inputText"
-          rows="2"
+          rows="3"
           class="notion-input"
-          placeholder="พิมพ์หรือวางบทสวดบาลี..."
+          placeholder="พิมพ์หรือวางบทสวดบาลี... (ขึ้นบรรทัดใหม่ได้ตามต้องการ)"
         ></textarea>
 
         <div class="action-row">
@@ -212,39 +451,41 @@ onUnmounted(() => {
           <div class="toggle-group">
             <button @click="toggleAll(true)" class="btn-ghost">👁️ เฉลยหมด</button>
             <button @click="toggleAll(false)" class="btn-ghost">🙈 ซ่อนหมด</button>
+            <button @click="undoReveal" class="btn-ghost" title="ปิดคำที่เปิดไว้ล่าสุด (ถอยหลังทีละคำ)">⌫ ปิดคำล่าสุด</button>
           </div>
         </div>
       </section>
 
-      <!-- Display Canvas หน้าอ่านสไตล์ Gemini -->
       <article class="reader-canvas">
-        <template v-if="processedWords.length > 0">
-          <div 
+        <template v-if="groupedLines.length > 0">
+          <div
             class="reading-content"
             :style="{ fontSize: `${fontSize}rem` }"
           >
-            <span
-              v-for="item in processedWords"
-              :key="item.id"
-              class="word-wrap"
+            <div
+              v-for="line in groupedLines"
+              :key="line.lineIndex"
+              class="reading-line"
             >
-              <!-- คำที่ถูกซ่อน -->
               <span
-                v-if="item.isHidden"
-                @click="toggleWord(item)"
-                class="hidden-slot"
-                :class="{
-                  'is-revealed': item.isRevealed,
-                  'is-active': hiddenWords[activeHiddenIndex]?.id === item.id
-                }"
+                v-for="item in line.words"
+                :key="item.id"
+                class="word-wrap"
               >
-                <!-- ข้อความจริงที่จะแสดงเมื่อ Hover หรือคลิกเปิด -->
-                <span class="slot-text">{{ item.text }}</span>
+                <span
+                  v-if="item.isHidden"
+                  @click="toggleWord(item)"
+                  class="hidden-slot"
+                  :class="{
+                    'is-revealed': item.isRevealed,
+                    'is-active': hiddenWords[activeHiddenIndex]?.id === item.id
+                  }"
+                >
+                  <span class="slot-text">{{ item.text }}</span>
+                </span>
+                <span v-else class="plain-word">{{ item.text }}</span>
               </span>
-
-              <!-- คำปกติ -->
-              <span v-else class="plain-word">{{ item.text }}</span>
-            </span>
+            </div>
           </div>
         </template>
 
@@ -252,14 +493,16 @@ onUnmounted(() => {
           <p>เลือกบทสวดมนต์ด้านบนเพื่อเริ่มฝึกท่องจำ</p>
         </div>
       </article>
-
     </main>
 
-    <!-- Footer Shortcuts Bar -->
     <footer class="app-footer">
-      <span>💡 <b>คีย์บอร์ด:</b> กดปุ่มลูกศร <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> เพื่อเลื่อนและ Auto เปิดเฉลย | <kbd>Shift</kbd> + <kbd>C</kbd> สลับเปิด/ปิดทั้งแถว</span>
+      <span>
+        💡 <b>คีย์บอร์ด:</b>
+        <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> เลื่อน + Auto เปิดเฉลย |
+        <kbd>Delete</kbd>/<kbd>Backspace</kbd> ปิดคำล่าสุดถอยหลังทีละคำ |
+        <kbd>Shift</kbd>+<kbd>C</kbd> ปิดคำที่เปิดทั้งหมด
+      </span>
     </footer>
-
   </div>
 </template>
 
@@ -302,7 +545,6 @@ html, body {
   background-color: #f8f9fa;
 }
 
-/* Header */
 .app-header {
   display: flex;
   justify-content: space-between;
@@ -310,6 +552,8 @@ html, body {
   padding-bottom: 0.75rem;
   border-bottom: 1px solid #e3e3e3;
   margin-bottom: 0.75rem;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .brand {
@@ -318,15 +562,35 @@ html, body {
   gap: 0.5rem;
 }
 
-.sparkle-icon {
-  font-size: 1.5rem;
-}
+.sparkle-icon { font-size: 1.5rem; }
 
 .title {
   font-size: 1.8rem;
   font-weight: 700;
   color: #1f1f1f;
 }
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.btn-export {
+  background: #0b57d0;
+  color: #fff;
+  border: none;
+  padding: 0.4rem 0.9rem;
+  border-radius: 20px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s;
+}
+
+.btn-export:hover { background: #0842a0; }
 
 .font-controls {
   display: flex;
@@ -339,9 +603,7 @@ html, body {
   font-size: 1.1rem;
 }
 
-.tool-label {
-  color: #666;
-}
+.tool-label { color: #666; }
 
 .btn-tool {
   background: #f1f3f4;
@@ -357,9 +619,7 @@ html, body {
   transition: background 0.2s;
 }
 
-.btn-tool:hover {
-  background: #e2e7eb;
-}
+.btn-tool:hover { background: #e2e7eb; }
 
 .font-indicator {
   font-size: 1.1rem;
@@ -368,7 +628,6 @@ html, body {
   text-align: center;
 }
 
-/* Main Workspace */
 .app-main {
   flex: 1;
   display: flex;
@@ -377,7 +636,6 @@ html, body {
   overflow: hidden;
 }
 
-/* Control Card Notion Style */
 .control-card {
   background: #ffffff;
   border: 1px solid #e3e3e3;
@@ -434,7 +692,8 @@ html, body {
   background: #f8f9fa;
   color: #1f1f1f;
   outline: none;
-  resize: none;
+  resize: vertical;
+  min-height: 3.5rem;
 }
 
 .notion-input:focus {
@@ -454,6 +713,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 0.4rem;
+  flex-wrap: wrap;
 }
 
 .btn-diff {
@@ -464,6 +724,7 @@ html, body {
   border-radius: 6px;
   font-size: 1.1rem;
   cursor: pointer;
+  font-family: inherit;
 }
 
 .btn-diff:hover, .btn-diff.dark {
@@ -479,13 +740,11 @@ html, body {
   font-size: 1.15rem;
   cursor: pointer;
   padding: 0 0.25rem;
+  font-family: inherit;
 }
 
-.btn-ghost:hover {
-  text-decoration: underline;
-}
+.btn-ghost:hover { text-decoration: underline; }
 
-/* Reader Canvas */
 .reader-canvas {
   flex: 1;
   background: #ffffff;
@@ -502,16 +761,18 @@ html, body {
   transition: font-size 0.2s ease;
 }
 
+.reading-line {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
 .word-wrap {
   display: inline-block;
   margin-right: 0.6rem;
 }
 
-.plain-word {
-  color: #1f1f1f;
-}
+.plain-word { color: #1f1f1f; }
 
-/* ซ่อนคำด้วยเส้นประแทนกล่อง เพื่อคงความสูงบรรทัดให้เท่าข้อความ */
 .hidden-slot {
   display: inline;
   position: relative;
@@ -567,11 +828,10 @@ html, body {
   font-size: 1.4rem;
 }
 
-/* Footer Bar */
 .app-footer {
   text-align: center;
   padding-top: 0.5rem;
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   color: #5f6368;
 }
 
