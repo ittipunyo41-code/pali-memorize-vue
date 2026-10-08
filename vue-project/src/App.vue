@@ -9,6 +9,8 @@ interface WordItem {
   lineIndex: number
 }
 
+type ThemeMode = 'light' | 'sepia' | 'dark'
+
 const presets = [
   {
     title: 'อิติปิโส (พุทธคุณ)',
@@ -30,6 +32,7 @@ const processedWords = ref<WordItem[]>([])
 const currentRatio = ref<number>(0.5)
 const fontSize = ref<number>(1.5)
 const activeHiddenIndex = ref<number>(-1)
+const themeMode = ref<ThemeMode>('light')
 
 const hiddenWords = computed(() => processedWords.value.filter(w => w.isHidden))
 
@@ -42,6 +45,22 @@ const groupedLines = computed(() => {
   return Array.from(map.entries())
     .sort((a, b) => a[0] - b[0])
     .map(([lineIndex, words]) => ({ lineIndex, words }))
+})
+
+const setTheme = (mode: ThemeMode) => {
+  themeMode.value = mode
+}
+
+const cycleTheme = () => {
+  const order: ThemeMode[] = ['light', 'sepia', 'dark']
+  const idx = order.indexOf(themeMode.value)
+  themeMode.value = order[(idx + 1) % order.length] ?? 'light'
+}
+
+const themeLabel = computed(() => {
+  if (themeMode.value === 'sepia') return '📜 สบายตา'
+  if (themeMode.value === 'dark') return '🌙 โหมดมืด'
+  return '☀️ สว่าง'
 })
 
 const changeFontSize = (delta: number) => {
@@ -90,7 +109,6 @@ const toggleAll = (reveal: boolean) => {
   })
 }
 
-// ปิดคำที่เปิดไว้ล่าสุด (ถอยหลังทีละคำ)
 const undoReveal = () => {
   let lastRevealedIdx = -1
   for (let i = hiddenWords.value.length - 1; i >= 0; i--) {
@@ -120,7 +138,6 @@ const handleKeyDown = (event: KeyboardEvent) => {
   const target = event.target as HTMLElement
   if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT')) return
 
-    // Shift + C: toggle เปิด/ปิดทั้งหมด
   if (event.shiftKey && (event.key === 'C' || event.key === 'c' || event.key === 'ฉ')) {
     event.preventDefault()
     const allRevealed = hiddenWords.value.every(w => w.isRevealed)
@@ -128,7 +145,6 @@ const handleKeyDown = (event: KeyboardEvent) => {
     return
   }
 
-  // Delete / Backspace: ปิดคำที่เปิดไว้ล่าสุด ถอยหลังทีละคำ
   if (event.key === 'Delete' || event.key === 'Backspace') {
     event.preventDefault()
     undoReveal()
@@ -165,69 +181,123 @@ const exportHTML = () => {
   }))
   const wordsJson = JSON.stringify(wordsData)
   const initialFontSize = fontSize.value
+  const initialTheme = themeMode.value
 
   const html = `<!DOCTYPE html>
-<html lang="th">
+<html lang="th" data-theme="${initialTheme}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>บาลีฝึกท่องจำ</title>
 <style>
-  :root { --font-size: ${initialFontSize}rem; }
+  :root {
+    --font-size: ${initialFontSize}rem;
+    --bg: #f8f9fa;
+    --surface: #ffffff;
+    --border: #e3e3e3;
+    --text: #1f1f1f;
+    --text-soft: #5f6368;
+    --text-mute: #70757a;
+    --accent: #0b57d0;
+    --accent-hover: #0842a0;
+    --btn-bg: #f1f3f4;
+    --btn-hover: #e2e7eb;
+    --slot-dash: #9aa4b2;
+    --slot-revealed: #8ab4f8;
+    --slot-active: #1f5fe8;
+    --slot-text: #0d4bbf;
+    --shadow: rgba(0,0,0,0.05);
+  }
+  html[data-theme="sepia"] {
+    --bg: #f4ecd8;
+    --surface: #fbf6e9;
+    --border: #d9cdb0;
+    --text: #3b2f1e;
+    --text-soft: #6b5a3e;
+    --text-mute: #8a795a;
+    --accent: #8b5e34;
+    --accent-hover: #6f4a26;
+    --btn-bg: #ede0c8;
+    --btn-hover: #e0d0b0;
+    --slot-dash: #b8a782;
+    --slot-revealed: #d4b483;
+    --slot-active: #8b5e34;
+    --slot-text: #6f4a26;
+    --shadow: rgba(80,60,30,0.08);
+  }
+  html[data-theme="dark"] {
+    --bg: #121212;
+    --surface: #1e1e1e;
+    --border: #333333;
+    --text: #e8eaed;
+    --text-soft: #b8bcc2;
+    --text-mute: #8a8f96;
+    --accent: #8ab4f8;
+    --accent-hover: #aecbfa;
+    --btn-bg: #2a2a2a;
+    --btn-hover: #3a3a3a;
+    --slot-dash: #5f6368;
+    --slot-revealed: #8ab4f8;
+    --slot-active: #aecbfa;
+    --slot-text: #aecbfa;
+    --shadow: rgba(0,0,0,0.4);
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: 'TH Sarabun New', 'Sarabun', 'Leelawadee UI', 'Tahoma', sans-serif;
-    background: #f8f9fa; color: #1f1f1f; padding: 2rem 1rem;
-    min-height: 100vh;
+    background: var(--bg); color: var(--text); padding: 2rem 1rem;
+    min-height: 100vh; transition: background 0.3s, color 0.3s;
   }
   .container {
-    max-width: 1200px; margin: 0 auto; background: #fff;
+    max-width: 1200px; margin: 0 auto; background: var(--surface);
     border-radius: 12px; padding: 2rem 3rem;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    box-shadow: 0 2px 6px var(--shadow);
+    border: 1px solid var(--border);
+    transition: background 0.3s, border-color 0.3s;
   }
   h1 { font-size: 1.8rem; margin-bottom: 1rem; font-weight: 700; }
   .toolbar {
     display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;
-    margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid #e3e3e3;
+    margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border);
   }
   .toolbar button {
-    background: #f1f3f4; border: none; padding: 0.35rem 0.8rem;
-    border-radius: 8px; cursor: pointer; font-family: inherit;
-    font-size: 1rem; transition: background 0.2s;
+    background: var(--btn-bg); color: var(--text); border: none;
+    padding: 0.35rem 0.8rem; border-radius: 8px; cursor: pointer;
+    font-family: inherit; font-size: 1rem; transition: background 0.2s;
   }
-  .toolbar button:hover { background: #e2e7eb; }
+  .toolbar button:hover { background: var(--btn-hover); }
   .toolbar .font-label {
-    padding: 0.35rem 0.5rem; font-size: 1rem; color: #444;
+    padding: 0.35rem 0.5rem; font-size: 1rem; color: var(--text-soft);
     min-width: 3.5rem; text-align: center;
   }
   .content {
     line-height: 2.2; font-size: var(--font-size);
-    transition: font-size 0.2s ease;
+    transition: font-size 0.2s ease; color: var(--text);
   }
   .line { margin-bottom: 0.25rem; }
   .word { display: inline-block; margin-right: 0.6rem; }
   .hidden-slot {
     display: inline; position: relative;
-    border-bottom: 2px dashed #9aa4b2;
+    border-bottom: 2px dashed var(--slot-dash);
     cursor: pointer; user-select: none;
     transition: border-color 0.18s ease;
   }
   .hidden-slot .slot-text {
     opacity: 0; visibility: hidden;
-    color: #0d4bbf; font-weight: 700; letter-spacing: 0.02em;
+    color: var(--slot-text); font-weight: 700; letter-spacing: 0.02em;
     white-space: nowrap; transition: opacity 0.18s ease;
   }
-  .hidden-slot:hover { border-color: #1f5fe8; border-bottom-style: solid; }
+  .hidden-slot:hover { border-color: var(--slot-active); border-bottom-style: solid; }
   .hidden-slot:hover .slot-text { opacity: 1; visibility: visible; }
-  .hidden-slot.is-revealed { border-color: #8ab4f8; border-bottom-style: solid; }
+  .hidden-slot.is-revealed { border-color: var(--slot-revealed); border-bottom-style: solid; }
   .hidden-slot.is-revealed .slot-text { opacity: 1; visibility: visible; }
-  .hidden-slot.is-active { border-color: #1f5fe8; border-bottom-style: solid; }
+  .hidden-slot.is-active { border-color: var(--slot-active); border-bottom-style: solid; }
   .footer {
-    margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e3e3e3;
-    font-size: 0.95rem; color: #5f6368; text-align: center;
+    margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border);
+    font-size: 0.95rem; color: var(--text-soft); text-align: center;
   }
   kbd {
-    background: #f1f3f4; border: 1px solid #dadce0; border-radius: 4px;
+    background: var(--btn-bg); border: 1px solid var(--border); border-radius: 4px;
     padding: 0.05rem 0.3rem; font-family: monospace; font-size: 0.9em;
   }
 </style>
@@ -242,12 +312,13 @@ const exportHTML = () => {
     <button onclick="changeFont(-0.1)">A-</button>
     <span class="font-label" id="fontLabel">100%</span>
     <button onclick="changeFont(0.1)">A+</button>
+    <button onclick="cycleTheme()" id="themeBtn">☀️ สว่าง</button>
   </div>
   <div class="content" id="content"></div>
   <div class="footer">
     💡 <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> เลื่อน + Auto เปิดเฉลย |
     <kbd>Delete</kbd> / <kbd>Backspace</kbd> ปิดคำล่าสุดถอยหลังทีละคำ |
-    <kbd>Shift</kbd>+<kbd>C</kbd> ปิดคำที่เปิดทั้งหมด
+    <kbd>Shift</kbd>+<kbd>C</kbd> สลับเปิด/ปิดทั้งหมด
   </div>
 </div>
 <script>
@@ -257,6 +328,21 @@ const exportHTML = () => {
   var currentFontSize = baseFontSize;
   var activeIndex = -1;
   var hiddenWords = words.filter(function(w) { return w.isHidden; });
+  var themes = ['light', 'sepia', 'dark'];
+  var themeLabels = { light: '☀️ สว่าง', sepia: '📜 สบายตา', dark: '🌙 โหมดมืด' };
+  var currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+
+  function applyTheme(t) {
+    currentTheme = t;
+    document.documentElement.setAttribute('data-theme', t);
+    var btn = document.getElementById('themeBtn');
+    if (btn) btn.textContent = themeLabels[t] || '☀️ สว่าง';
+  }
+
+  window.cycleTheme = function() {
+    var idx = themes.indexOf(currentTheme);
+    applyTheme(themes[(idx + 1) % themes.length]);
+  };
 
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, function(c) {
@@ -332,14 +418,12 @@ const exportHTML = () => {
 
   document.addEventListener('keydown', function(e) {
     if (hiddenWords.length === 0) return;
-        // Shift+C: toggle เปิด/ปิดทั้งหมด
     if (e.shiftKey && (e.key === 'C' || e.key === 'c' || e.key === 'ฉ')) {
       e.preventDefault();
       var allRevealed = hiddenWords.every(function(w) { return w.isRevealed; });
       window.revealAll(!allRevealed);
       return;
     }
-    // Delete / Backspace: ปิดคำล่าสุดถอยหลังทีละคำ
     if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
       window.undoReveal();
@@ -367,6 +451,7 @@ const exportHTML = () => {
 
   document.getElementById('fontLabel').textContent =
     Math.round((currentFontSize / 1.5) * 100) + '%';
+  applyTheme(currentTheme);
   render();
 })();
 <\/script>
@@ -395,7 +480,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="gemini-app font-sarabun">
+  <div class="gemini-app font-sarabun" :data-theme="themeMode">
     <header class="app-header">
       <div class="brand">
         <span class="sparkle-icon">✨</span>
@@ -405,6 +490,10 @@ onUnmounted(() => {
       <div class="header-right">
         <button @click="exportHTML" class="btn-export" title="ดาวน์โหลดไฟล์ HTML สำหรับฝึกออฟไลน์">
           ⬇️ Export HTML
+        </button>
+
+        <button @click="cycleTheme" class="btn-theme" :title="`ธีมปัจจุบัน: ${themeLabel} (คลิกเพื่อเปลี่ยน)`">
+          {{ themeLabel }}
         </button>
 
         <div class="font-controls">
@@ -500,7 +589,7 @@ onUnmounted(() => {
         💡 <b>คีย์บอร์ด:</b>
         <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> เลื่อน + Auto เปิดเฉลย |
         <kbd>Delete</kbd>/<kbd>Backspace</kbd> ปิดคำล่าสุดถอยหลังทีละคำ |
-        <kbd>Shift</kbd>+<kbd>C</kbd> ปิดคำที่เปิดทั้งหมด
+        <kbd>Shift</kbd>+<kbd>C</kbd> สลับเปิด/ปิดทั้งหมด
       </span>
     </footer>
   </div>
@@ -519,8 +608,6 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: #f8f9fa;
-  color: #1f1f1f;
 }
 
 #app {
@@ -536,24 +623,98 @@ html, body {
   font-family: 'TH Sarabun New', sans-serif;
 }
 
+/* ================= Theme Variables ================= */
 .gemini-app {
+  --bg: #f8f9fa;
+  --surface: #ffffff;
+  --border: #e3e3e3;
+  --text: #1f1f1f;
+  --text-soft: #5f6368;
+  --text-mute: #70757a;
+  --accent: #0b57d0;
+  --accent-hover: #0842a0;
+  --btn-bg: #f1f3f4;
+  --btn-hover: #e2e7eb;
+  --label-color: #444746;
+  --pill-bg: #f1f3f4;
+  --pill-text: #3c4043;
+  --pill-hover: #e8eaed;
+  --input-bg: #f8f9fa;
+  --slot-dash: #9aa4b2;
+  --slot-revealed: #8ab4f8;
+  --slot-active: #1f5fe8;
+  --slot-text: #0d4bbf;
+  --shadow: rgba(0,0,0,0.02);
+
   width: 100vw;
   height: 100dvh;
   display: flex;
   flex-direction: column;
   padding: 1rem 1.5rem;
-  background-color: #f8f9fa;
+  background-color: var(--bg);
+  color: var(--text);
+  transition: background-color 0.3s, color 0.3s;
 }
 
+/* โหมดสบายตา (Sepia) */
+.gemini-app[data-theme="sepia"] {
+  --bg: #f4ecd8;
+  --surface: #fbf6e9;
+  --border: #d9cdb0;
+  --text: #3b2f1e;
+  --text-soft: #6b5a3e;
+  --text-mute: #8a795a;
+  --accent: #8b5e34;
+  --accent-hover: #6f4a26;
+  --btn-bg: #ede0c8;
+  --btn-hover: #e0d0b0;
+  --label-color: #6b5a3e;
+  --pill-bg: #ede0c8;
+  --pill-text: #5a4425;
+  --pill-hover: #e0d0b0;
+  --input-bg: #fbf6e9;
+  --slot-dash: #b8a782;
+  --slot-revealed: #d4b483;
+  --slot-active: #8b5e34;
+  --slot-text: #6f4a26;
+  --shadow: rgba(80,60,30,0.08);
+}
+
+/* โหมดมืด (Dark) */
+.gemini-app[data-theme="dark"] {
+  --bg: #121212;
+  --surface: #1e1e1e;
+  --border: #333333;
+  --text: #e8eaed;
+  --text-soft: #b8bcc2;
+  --text-mute: #8a8f96;
+  --accent: #8ab4f8;
+  --accent-hover: #aecbfa;
+  --btn-bg: #2a2a2a;
+  --btn-hover: #3a3a3a;
+  --label-color: #b8bcc2;
+  --pill-bg: #2a2a2a;
+  --pill-text: #d7dbe0;
+  --pill-hover: #3a3a3a;
+  --input-bg: #2a2a2a;
+  --slot-dash: #5f6368;
+  --slot-revealed: #8ab4f8;
+  --slot-active: #aecbfa;
+  --slot-text: #aecbfa;
+  --shadow: rgba(0,0,0,0.4);
+}
+
+/* ================= Header ================= */
 .app-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid #e3e3e3;
+  border-bottom: 1px solid var(--border);
   margin-bottom: 0.75rem;
   gap: 1rem;
   flex-wrap: wrap;
+  transition: border-color 0.3s;
 }
 
 .brand {
@@ -567,7 +728,8 @@ html, body {
 .title {
   font-size: 1.8rem;
   font-weight: 700;
-  color: #1f1f1f;
+  color: var(--text);
+  transition: color 0.3s;
 }
 
 .header-right {
@@ -578,7 +740,7 @@ html, body {
 }
 
 .btn-export {
-  background: #0b57d0;
+  background: var(--accent);
   color: #fff;
   border: none;
   padding: 0.4rem 0.9rem;
@@ -590,23 +752,40 @@ html, body {
   transition: background 0.2s;
 }
 
-.btn-export:hover { background: #0842a0; }
+.btn-export:hover { background: var(--accent-hover); }
+
+.btn-theme {
+  background: var(--btn-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 0.4rem 0.9rem;
+  border-radius: 20px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.btn-theme:hover { background: var(--btn-hover); }
 
 .font-controls {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: #ffffff;
+  background: var(--surface);
   padding: 0.25rem 0.75rem;
   border-radius: 20px;
-  border: 1px solid #e3e3e3;
+  border: 1px solid var(--border);
   font-size: 1.1rem;
+  transition: background 0.3s, border-color 0.3s;
 }
 
-.tool-label { color: #666; }
+.tool-label { color: var(--text-soft); }
 
 .btn-tool {
-  background: #f1f3f4;
+  background: var(--btn-bg);
+  color: var(--text);
   border: none;
   width: 28px;
   height: 28px;
@@ -619,15 +798,17 @@ html, body {
   transition: background 0.2s;
 }
 
-.btn-tool:hover { background: #e2e7eb; }
+.btn-tool:hover { background: var(--btn-hover); }
 
 .font-indicator {
   font-size: 1.1rem;
   font-weight: 600;
   min-width: 40px;
   text-align: center;
+  color: var(--text);
 }
 
+/* ================= Main ================= */
 .app-main {
   flex: 1;
   display: flex;
@@ -637,14 +818,15 @@ html, body {
 }
 
 .control-card {
-  background: #ffffff;
-  border: 1px solid #e3e3e3;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 0.75rem 1rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+  box-shadow: 0 1px 3px var(--shadow);
+  transition: background 0.3s, border-color 0.3s;
 }
 
 .preset-row {
@@ -657,7 +839,8 @@ html, body {
 .label {
   font-size: 1.2rem;
   font-weight: 600;
-  color: #444746;
+  color: var(--label-color);
+  transition: color 0.3s;
 }
 
 .preset-pills {
@@ -667,38 +850,40 @@ html, body {
 }
 
 .pill-btn {
-  background: #f1f3f4;
+  background: var(--pill-bg);
   border: none;
-  color: #3c4043;
+  color: var(--pill-text);
   padding: 0.2rem 0.65rem;
   border-radius: 16px;
   font-size: 1.15rem;
   cursor: pointer;
+  font-family: inherit;
   transition: all 0.2s;
 }
 
 .pill-btn:hover {
-  background: #e8eaed;
-  color: #1f1f1f;
+  background: var(--pill-hover);
+  color: var(--text);
 }
 
 .notion-input {
   width: 100%;
   padding: 0.4rem 0.65rem;
-  border: 1px solid #e3e3e3;
+  border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 1.25rem;
   font-family: inherit;
-  background: #f8f9fa;
-  color: #1f1f1f;
+  background: var(--input-bg);
+  color: var(--text);
   outline: none;
   resize: vertical;
   min-height: 3.5rem;
+  transition: background 0.3s, border-color 0.3s, color 0.3s;
 }
 
 .notion-input:focus {
-  border-color: #0b57d0;
-  background: #ffffff;
+  border-color: var(--accent);
+  background: var(--surface);
 }
 
 .action-row {
@@ -717,48 +902,52 @@ html, body {
 }
 
 .btn-diff {
-  background: #ffffff;
-  border: 1px solid #e3e3e3;
-  color: #444746;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--label-color);
   padding: 0.15rem 0.5rem;
   border-radius: 6px;
   font-size: 1.1rem;
   cursor: pointer;
   font-family: inherit;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
 }
 
 .btn-diff:hover, .btn-diff.dark {
-  background: #0b57d0;
-  color: #ffffff;
-  border-color: #0b57d0;
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
 }
 
 .btn-ghost {
   background: transparent;
   border: none;
-  color: #0b57d0;
+  color: var(--accent);
   font-size: 1.15rem;
   cursor: pointer;
   padding: 0 0.25rem;
   font-family: inherit;
+  transition: color 0.3s;
 }
 
 .btn-ghost:hover { text-decoration: underline; }
 
+/* ================= Reader ================= */
 .reader-canvas {
   flex: 1;
-  background: #ffffff;
-  border: 1px solid #e3e3e3;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 1.5rem 2rem;
   overflow-y: auto;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+  box-shadow: 0 2px 6px var(--shadow);
+  transition: background 0.3s, border-color 0.3s;
 }
 
 .reading-content {
   line-height: 2.2;
-  color: #1f1f1f;
-  transition: font-size 0.2s ease;
+  color: var(--text);
+  transition: font-size 0.2s ease, color 0.3s;
 }
 
 .reading-line {
@@ -771,14 +960,14 @@ html, body {
   margin-right: 0.6rem;
 }
 
-.plain-word { color: #1f1f1f; }
+.plain-word { color: var(--text); }
 
 .hidden-slot {
   display: inline;
   position: relative;
   padding: 0;
   margin: 0 0.08rem;
-  border-bottom: 2px dashed #9aa4b2;
+  border-bottom: 2px dashed var(--slot-dash);
   cursor: pointer;
   user-select: none;
   transition: border-color 0.18s ease;
@@ -787,7 +976,7 @@ html, body {
 .hidden-slot .slot-text {
   opacity: 0;
   visibility: hidden;
-  color: #0d4bbf;
+  color: var(--slot-text);
   font-weight: 700;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -795,7 +984,7 @@ html, body {
 }
 
 .hidden-slot:hover {
-  border-color: #1f5fe8;
+  border-color: var(--slot-active);
   border-bottom-style: solid;
 }
 
@@ -805,7 +994,7 @@ html, body {
 }
 
 .hidden-slot.is-revealed {
-  border-color: #8ab4f8;
+  border-color: var(--slot-revealed);
   border-bottom-style: solid;
 }
 
@@ -815,7 +1004,7 @@ html, body {
 }
 
 .hidden-slot.is-active {
-  border-color: #1f5fe8;
+  border-color: var(--slot-active);
   border-bottom-style: solid;
 }
 
@@ -824,23 +1013,27 @@ html, body {
   display: flex;
   justify-content: center;
   align-items: center;
-  color: #70757a;
+  color: var(--text-mute);
   font-size: 1.4rem;
 }
 
+/* ================= Footer ================= */
 .app-footer {
   text-align: center;
   padding-top: 0.5rem;
   font-size: 1.05rem;
-  color: #5f6368;
+  color: var(--text-soft);
+  transition: color 0.3s;
 }
 
 kbd {
-  background: #f1f3f4;
-  border: 1px solid #dadce0;
+  background: var(--btn-bg);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0.05rem 0.3rem;
   font-family: monospace;
   font-size: 0.95rem;
+  color: var(--text);
+  transition: background 0.3s, border-color 0.3s, color 0.3s;
 }
 </style>
